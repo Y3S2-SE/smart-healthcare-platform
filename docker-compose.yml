@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+
+  # API Gateway
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: api-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - frontend
+
+  # Auth Service
+  auth-service:
+    build: 
+      context: ./services/auth-service
+      dockerfile: Dockerfile.dev
+    container_name: auth-service
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./services/auth-service/.env
+    volumes:
+      - ./services/auth-service:/app
+      - auth_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - auth
+      - frontend
+
+  # Patient Service
+  patient-service:
+    build: 
+      context: ./services/patient-service
+      dockerfile: Dockerfile.dev
+    container_name: patient-service
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./services/patient-service/.env
+    volumes:
+      - ./services/patient-service:/app
+      - patient_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - patient
+      - frontend
+
+  # Doctor Service
+  doctor-service:
+    build: 
+      context: ./services/doctor-service
+      dockerfile: Dockerfile.dev
+    container_name: doctor-service
+    ports:
+      - "3003:3003"
+    env_file:
+      - ./services/doctor-service/.env
+    volumes:
+      - ./services/doctor-service:/app
+      - doctor_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - doctor
+      - appointment
+      - frontend
+
+  # Appointment Service
+  appointment-service:
+    build: 
+      context: ./services/appointment-service
+      dockerfile: Dockerfile.dev
+    container_name: appointment-service
+    ports:
+      - "3004:3004"
+    env_file:
+      - ./services/appointment-service/.env
+    volumes:
+      - ./services/appointment-service:/app
+      - appointment_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - appointment
+      - frontend
+
+  # Payment Service
+  payment-service:
+    build: 
+      context: ./services/payment-service
+      dockerfile: Dockerfile.dev
+    container_name: payment-service
+    ports:
+      - "3005:3005"
+    env_file:
+      - ./services/payment-service/.env
+    volumes:
+      - ./services/payment-service:/app
+      - payment_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - payment
+      - frontend
+
+  # Notification Service
+  notification-service:
+    build: 
+      context: ./services/notification-service
+      dockerfile: Dockerfile.dev
+    container_name: notification-service
+    ports:
+      - "3006:3006"
+    env_file:
+      - ./services/notification-service/.env
+    volumes:
+      - ./services/notification-service:/app
+      - notification_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - notification
+      - appointment
+
+  # Telemedicine Service
+  telemedicine-service:
+    build: 
+      context: ./services/telemedicine-service
+      dockerfile: Dockerfile.dev
+    container_name: telemedicine-service
+    ports:
+      - "3007:3007"
+    env_file:
+      - ./services/telemedicine-service/.env
+    volumes:
+      - ./services/telemedicine-service:/app
+      - telemedicine_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - telemedicine
+      - frontend
+
+  # AI Symptom Service
+  ai-symptom-service:
+    build: 
+      context: ./services/ai-symptom-service
+      dockerfile: Dockerfile.dev
+    container_name: ai-symptom-service
+    ports:
+      - "3008:3008"
+    env_file:
+      - ./services/ai-symptom-service/.env
+    volumes:
+      - ./services/ai-symptom-service:/app
+      - ai_symptom_modules:/app/node_modules
+    networks:
+      - healthcare-net
+    restart: unless-stopped
+    profiles:
+      - full
+      - ai-symptom
+      - frontend
+
+volumes:
+  auth_modules:
+  patient_modules:
+  doctor_modules:
+  appointment_modules:
+  payment_modules:
+  notification_modules:
+  telemedicine_modules:
+  ai_symptom_modules:
+
+networks:
+  healthcare-net:
+    driver: bridge
