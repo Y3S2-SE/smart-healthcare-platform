@@ -2,11 +2,10 @@
   "name": "doctor-service",
   "version": "1.0.0",
   "main": "index.js",
-  "devDependencies": {
-    "nodemon": "^3.1.14"
-  },
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
@@ -18,5 +17,8 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }
