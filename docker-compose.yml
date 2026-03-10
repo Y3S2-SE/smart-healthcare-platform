@@ -2,7 +2,6 @@ version: '3.8'
 
 services:
 
-  # API Gateway
   nginx:
     image: nginx:1.25-alpine
     container_name: api-gateway
@@ -17,9 +16,8 @@ services:
       - full
       - frontend
 
-  # Auth Service
   auth-service:
-    build: 
+    build:
       context: ./services/auth-service
       dockerfile: Dockerfile.dev
     container_name: auth-service
@@ -37,10 +35,15 @@ services:
       - full
       - auth
       - frontend
+      - patient       # ← added: patient dev needs login
+      - doctor        # ← added: doctor dev needs login
+      - appointment   # ← added: booking flow needs login
+      - payment       # ← added: payment flow needs login
+      - telemedicine  # ← added: video session needs login
+      - ai-symptom    # ← added: ai checker needs login
 
-  # Patient Service
   patient-service:
-    build: 
+    build:
       context: ./services/patient-service
       dockerfile: Dockerfile.dev
     container_name: patient-service
@@ -58,10 +61,12 @@ services:
       - full
       - patient
       - frontend
+      - appointment   # ← added: patient is who books
+      - payment       # ← added: patient is who pays
+      - telemedicine  # ← added: patient is who consults
 
-  # Doctor Service
   doctor-service:
-    build: 
+    build:
       context: ./services/doctor-service
       dockerfile: Dockerfile.dev
     container_name: doctor-service
@@ -78,12 +83,12 @@ services:
     profiles:
       - full
       - doctor
-      - appointment
       - frontend
+      - appointment   # already existed — correct
+      - telemedicine  # ← added: doctor is who consults
 
-  # Appointment Service
   appointment-service:
-    build: 
+    build:
       context: ./services/appointment-service
       dockerfile: Dockerfile.dev
     container_name: appointment-service
@@ -101,10 +106,11 @@ services:
       - full
       - appointment
       - frontend
+      - payment       # ← added: payment verifies appointment
+      - telemedicine  # ← added: video session tied to appointment
 
-  # Payment Service
   payment-service:
-    build: 
+    build:
       context: ./services/payment-service
       dockerfile: Dockerfile.dev
     container_name: payment-service
@@ -123,9 +129,8 @@ services:
       - payment
       - frontend
 
-  # Notification Service
   notification-service:
-    build: 
+    build:
       context: ./services/notification-service
       dockerfile: Dockerfile.dev
     container_name: notification-service
@@ -142,11 +147,13 @@ services:
     profiles:
       - full
       - notification
-      - appointment
+      - appointment   # already existed — correct
+      - payment       # ← added: payment confirmation
+      - telemedicine  # ← added: session reminders
+      - frontend      # ← added: frontend needs notifications
 
-  # Telemedicine Service
   telemedicine-service:
-    build: 
+    build:
       context: ./services/telemedicine-service
       dockerfile: Dockerfile.dev
     container_name: telemedicine-service
@@ -165,9 +172,8 @@ services:
       - telemedicine
       - frontend
 
-  # AI Symptom Service
   ai-symptom-service:
-    build: 
+    build:
       context: ./services/ai-symptom-service
       dockerfile: Dockerfile.dev
     container_name: ai-symptom-service
