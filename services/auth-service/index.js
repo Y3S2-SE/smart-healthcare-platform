@@ -4,6 +4,7 @@ import cors from 'cors';
 import { errorHandler, notFound } from './src/middleware/errorHandler.js';
 import { connectDB } from './src/config/db.js';
 import { logger } from './src/utils/logger.js';
+import authRoutes from './src/routes/authRoutes.js';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.get('/health', (req, res) => {
 });
 
 // Routes
+app.use('/api/auth', authRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
