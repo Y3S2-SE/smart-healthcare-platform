@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { logger } from '../utils/logger.js';
-import { validateLogin, validateRegister } from '../validators/authValidator.js';
+import { validateCreateAdmin, validateLogin, validateRegister } from '../validators/authValidator.js';
 
 
 const generateToken = (user) => 
@@ -278,7 +278,377 @@ export const verifyToken = (req, res) => {
 // Admin + Super Admin controllers
 
 /**
- * @desc    Update profile details
- * @route   PUT /api/auth/me
+ * @desc    Get all users 
+ * @route   GET /api/auth/admin/users
  * @access  Private
  */
+export const getAllUsers = async (req, res, next) => {
+    try {
+        const {
+            role,
+            isActive,
+            isApproved,
+            search,
+            page = 1,
+            limit = 20,
+        } = req.query;
+
+        const filter = {};
+        if (role) filter.role = role;
+        if (isActive !== undefined) filter.isActive = isActive === 'true';
+        if (isApproved !== undefined) filter.isApproved = isApproved === 'true';
+
+        // Search by first name, last name, or email
+        if (search) {
+            filter.$or = [
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const [users, total] = await Promise.all([
+            User.find(filter)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .sort({ lastName: 1, firstName: 1 }),
+            User.countDocuments(filter),
+        ]);
+
+        res.status(200).json({
+            success: true,
+            total,
+            page: parseInt(page),
+            pages: Math.ceil(total / parseInt(limit)),
+            users: users.map(safeUser),
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * @desc    Search specific user
+ * @route   GET /api/auth/admin/users/:id
+ * @access  Private
+ */
+export const getUserById = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+        res.status(200).json({ success: true, user: safeUser(user) });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+/**
+ * @desc    Approves a doctor after admin review
+ * @route   PUT /api/auth/admin/users/:id/approve
+ * @access  Private
+ */
+export const approveDoctor = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+        if (user.role !== 'doctor') {
+            return res.status(400).json({
+                success: false,
+                error: 'User is not a doctor.',
+            });
+        }
+        if (user.isApproved) {
+            return res.status(400).json({
+                success: false,
+                error: 'Doctor is already approved.',
+            });
+        }
+
+        user.isApproved = true;
+        await user.save({ validateBeforeSave: false });
+
+        logger.success(
+            `Doctor approved by [${req.user.fullName}]: Dr. ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Dr. ${user.firstName} ${user.lastName} approved successfully.`,
+            user: safeUser(user),
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+/**
+ * @desc    Rejects a doctor after admin review
+ * @route   PUT /api/auth/admin/users/:id/reject
+ * @access  Private
+ */
+export const rejectDoctor = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+        if (user.role !== 'doctor') {
+            return res.status(400).json({
+                success: false,
+                error: 'User is not a doctor.',
+            });
+        }
+
+        user.isApproved = false;
+        user.isActive = false;
+        await user.save({ validateBeforeSave: false });
+
+        logger.warn(
+            `Doctor rejected by [${req.user.fullName}]: Dr. ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Dr. ${user.firstName} ${user.lastName} registration rejected.`,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * @desc    Deactivate users: Admin cannot deactivate superadmin or other admins
+            Only superadmin can touch admin accounts
+ * @route   PUT /api/auth/admin/users/:id/deactivate
+ * @access  Private
+ */
+export const deactivateUser = async (req, res, next) => {
+    try {
+        if (req.params.id === req.user._id.toString()) {
+            return res.status(400).json({
+                success: false,
+                error: 'You cannot deactivate your own account.',
+            });
+        }
+
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+
+        if (
+            req.user.role === 'admin' &&
+            ['admin', 'superadmin'].includes(user.role)
+        ) {
+            return res.status(403).json({
+                success: false,
+                error: 'Admins cannot deactivate other admins or superadmin.',
+            });
+        }
+
+        user.isActive = false;
+        await user.save({ validateBeforeSave: false });
+
+        logger.warn(
+            `User deactivated by [${req.user.fullName}]: ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `${user.firstName} ${user.lastName}'s account deactivated.`,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+/**
+ * @desc    Activate users
+ * @route   PUT /api/auth/admin/users/:id/activate
+ * @access  Private
+ */
+export const activateUser = async (req, res, next) => {
+    try {
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            { isActive: true },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+
+        logger.success(
+            `User activated by [${req.user.fullName}]: ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `${user.firstName} ${user.lastName}'s account activated.`,
+            user: safeUser(user),
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+/**
+ * @desc    Delete users
+ * @route   PUT /api/auth/admin/users/:id
+ * @access  Private
+ */
+export const deleteUser = async (req, res, next) => {
+    try {
+        if (req.params.id === req.user._id.toString()) {
+            return res.status(400).json({
+                success: false,
+                error: 'You cannot delete your own account.',
+            });
+        }
+
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+
+        // Admin cannot delete other admins or superadmin
+        if (
+            req.user.role === 'admin' &&
+            ['admin', 'superadmin'].includes(user.role)
+        ) {
+            return res.status(403).json({
+                success: false,
+                error: 'Admins cannot delete other admins or superadmin.',
+            });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+
+        logger.warn(
+            `User deleted by [${req.user.fullName}]: ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `${user.firstName} ${user.lastName} permanently deleted.`,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// Super Admin only routes
+
+/**
+ * @desc    Create admin accounts (Only superadmin can do this)
+ * @route   PUT /api/auth/superadmin/createadmin
+ * @access  Private
+ */
+export const createAdmin = async (req, res, next) => {
+    try {
+        const { valid, errors } = validateCreateAdmin(req.body);
+        if (!valid) {
+            return res.status(400).json({ success: false, errors });
+        }
+
+        const { firstName, lastName, email, password } = req.body;
+
+        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                error: 'Email already in use.',
+            });
+        }
+
+        const admin = await User.create({
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            email: email.toLowerCase(),
+            password,
+            role: 'admin',
+            isApproved: true,
+            isVerified: true,
+        });
+
+        logger.success(
+            `Admin created by superadmin [${req.user.fullName}]: ${admin.fullName}`
+        );
+
+        res.status(201).json({
+            success: true,
+            message: `Admin account created for ${admin.firstName} ${admin.lastName}.`,
+            user: safeUser(admin),
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * @desc    Delete admin accounts (Only superadmin can do this)
+ * @route   DELETE /api/auth/superadmin/admins/:id
+ * @access  Private
+ */
+export const deleteAdmin = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found.',
+            });
+        }
+        if (user.role !== 'admin') {
+            return res.status(400).json({
+                success: false,
+                error: 'User is not an admin.',
+            });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+
+        logger.warn(
+            `Admin deleted by superadmin [${req.user.fullName}]: ${user.fullName}`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Admin ${user.firstName} ${user.lastName} deleted.`,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
